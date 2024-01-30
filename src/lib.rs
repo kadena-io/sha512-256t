@@ -10,6 +10,8 @@ use digest::{
     typenum::Unsigned,
 };
 
+use digest::Digest;
+
 use sha2::Sha512;
 
 /// SHA512 hash truncated to 256 bits. This is not the NIST standardized
@@ -28,16 +30,22 @@ impl OutputSizeUser for Sha512_256t {
 
 }
 
+impl Update for Sha512_256t {
+    fn update(&mut self, data: &[u8]) {
+        Digest::update(&mut self.0, data)
+    }
+}
+
 impl Reset for Sha512_256t {
     fn reset(&mut self) {
-        self.0.reset()
+        Digest::reset(&mut self.0)
     }
 }
 
 impl FixedOutputReset for Sha512_256t {
     fn finalize_into_reset(&mut self, out: &mut Output<Self>) {
         let mut tmp : Output<Sha512> = Default::default();
-        self.0.finalize_into_reset(&mut tmp);
+        Digest::finalize_into_reset(&mut self.0, &mut tmp);
         out.copy_from_slice(&tmp[0..32])
     }
 }
@@ -45,7 +53,7 @@ impl FixedOutputReset for Sha512_256t {
 impl FixedOutput for Sha512_256t {
     fn finalize_into(self, out: &mut Output<Self>) {
         let mut tmp : Output<Sha512> = Default::default();
-        self.0.finalize_into(&mut tmp);
+        Digest::finalize_into(self.0, &mut tmp);
         out.copy_from_slice(&tmp[0..32]);
     }
 
@@ -57,11 +65,25 @@ impl Default for Sha512_256t {
     }
 }
 
-impl Update for Sha512_256t {
-    fn update(&mut self, data: &[u8]) {
-        self.0.update(data)
-    }
-}
-
 impl HashMarker for Sha512_256t { }
 
+#[test]
+fn test0() {
+    let data: [u8;4] = [1,2,3,4];
+    let a = Sha512_256t::digest(&data);
+
+    let mut ctx = Sha512_256t::new();
+
+    Digest::update(&mut ctx, &data);
+    let b = ctx.finalize_reset();
+    assert_eq!(a, b);
+
+    Digest::update(&mut ctx, &data[..2]);
+    Digest::update(&mut ctx, &data[2..]);
+    let c = ctx.finalize_reset();
+    assert_eq!(a, c);
+
+    Digest::update(&mut ctx, &data);
+    let d = ctx.finalize();
+    assert_eq!(a, d);
+}
